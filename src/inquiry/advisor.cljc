@@ -22,7 +22,12 @@
    :answer answer
    :stake (or stake :low)
    :confidence (case (or stake :low) :high 0.7 :medium 0.85 :low 0.95)
-   :rationale (str "proposed " (name op) " for client " (:client-id request))})
+   ;; pr-str, not name: `(name nil)` threw NullPointerException here,
+   ;; and :advise runs BEFORE :govern — so a nil op crashed the run
+   ;; instead of being refused as :unsupported-op, producing no verdict
+   ;; and no ledger entry. An advisor that cannot describe a request
+   ;; still has to hand it to the governor.
+   :rationale (str "proposed " (pr-str op) " for client " (:client-id request))})
 
 (defn mock-advisor []
   (reify Advisor
