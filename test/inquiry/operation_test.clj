@@ -1,0 +1,109 @@
+(ns inquiry.operation-test
+  "Every test here pins the NAME of the rule it claims to be about.
+
+  Asserting only that the actor refused is not enough: dropping the
+  `reserved` clause from `classify` leaves :delete-client-records
+  refused (hard? true) but relabels it :unsupported-op, and a test
+  that checked only for refusal stays green under that mutation. The
+  name is the part an operator reads and acts on — an enquirer told
+  `unsupported-op` goes looking for a typo, one told `reserved-op`
+  goes looking for the person allowed to do it."
+  (:require [clojure.test :refer [deftest is testing]]
+            [inquiry.operation :as operation]))
+
+(deftest classify-is-total
+  (testing "every op value lands in exactly one bucket, including nil"
+    (doseq [op [nil "answer-inquiry" :answer_inquiry 42 :purge-knowledge-base
+                :answer-inquiry :log-inquiry :publish-faq]]
+      (is (contains? #{:supported :reserved :unsupported}
+                     (:status (operation/classify op)))
+          (str "unclassified: " (pr-str op))))))
+
+(deftest supported-ops-are-supported
+  (doseq [op [:answer-inquiry :log-inquiry :publish-faq]]
+    (is (= :supported (:status (operation/classify op))))))
+
+(deftest undeclared-ops-are-a-vocabulary-error
+  (testing "an op nobody declared is :unsupported, not :reserved"
+    (doseq [op [:answer_inquiry "answer-inquiry" nil 42 :invent-an-answer]]
+      (is (= :unsupported (:status (operation/classify op)))
+          (str "expected :unsupported for " (pr-str op))))))
+
+(deftest reserved-ops-are-an-authority-boundary
+  (testing "acts that are real desk-adjacent work but not this actor's to propose"
+    (doseq [op [:give-legal-advice :give-medical-advice :decide-application
+                :amend-official-record :release-personal-data
+                :purge-knowledge-base :delete-client-records]]
+      (let [{:keys [status reason]} (operation/classify op)]
+        (is (= :reserved status) (str "expected :reserved for " op))
+        (is (seq reason) (str "a reserved op must say why: " op))))))
+
+(deftest reserved-is-not-merely-unsupported
+  (testing "the two refusals are distinguishable — this is the whole point"
+    (is (not= (:status (operation/classify :delete-client-records))
+              (:status (operation/classify :not-an-op-at-all))))))
+
+(deftest only-publish-faq-always-escalates
+  (is (operation/escalates? :publish-faq))
+  (is (not (operation/escalates? :answer-inquiry)))
+  (is (not (operation/escalates? :log-inquiry)))
+  (testing "an unknown op does not claim to escalate — it is refused instead"
+    (is (not (operation/escalates? :nonsense)))
+    (is (not (operation/escalates? nil)))))
+
+;; ------------------------------------------------------------ shape
+
+(defn- rules [vs] (set (map :rule vs)))
+
+(deftest an-answer-must-carry-an-answer
+  (testing "absent"
+    (is (contains? (rules (operation/malformed {:op :answer-inquiry :kb-id "kb-1"}))
+                   :incomplete-proposal)))
+  (testing "present but blank — an empty answer is not an answer"
+    (doseq [v ["" "   "]]
+      (is (contains? (rules (operation/malformed
+                             {:op :answer-inquiry :kb-id "kb-1" :answer v}))
+                     :ill-formed-field)
+          (str "blank answer admitted: " (pr-str v)))))
+  (testing "present but not a string"
+    (is (contains? (rules (operation/malformed
+                           {:op :answer-inquiry :kb-id "kb-1" :answer 42}))
+                   :ill-formed-field))))
+
+(deftest a-well-formed-answer-is-well-formed
+  (is (empty? (operation/malformed {:op :answer-inquiry :kb-id "kb-1"
+                                    :answer "9:00-17:00" :confidence 0.9}))))
+
+(deftest ops-that-require-nothing-require-nothing
+  (testing "log-inquiry and publish-faq carry no extra fields"
+    (is (empty? (operation/malformed {:op :log-inquiry :confidence 0.9})))
+    (is (empty? (operation/malformed {:op :publish-faq :confidence 0.9})))))
+
+(deftest a-stated-confidence-must-be-a-confidence
+  (testing "measured on 0abfc59: 2.5 cleared the 0.6 floor and was committed"
+    (doseq [c [2.5 -1.0 "0.9" :high]]
+      (is (contains? (rules (operation/malformed
+                             {:op :log-inquiry :confidence c}))
+                     :ill-formed-field)
+          (str "admitted as a confidence: " (pr-str c)))))
+  (testing "the boundaries themselves are confidences"
+    (doseq [c [0 1 0.6 0.95]]
+      (is (empty? (operation/malformed {:op :log-inquiry :confidence c}))
+          (str "rejected a legitimate confidence: " (pr-str c)))))
+  (testing "an ABSENT confidence is not ill-formed — it stays the low-confidence escalation"
+    (is (empty? (operation/malformed {:op :log-inquiry})))))
+
+;; -------------------------------------------------- datability of inputs
+
+(deftest a-request-without-an-integer-date-cannot-decide-freshness
+  (testing "measured on 0abfc59: :today nil served an entry that expired in 2023"
+    (doseq [today [nil "20260713" :today 20260713.5]]
+      (is (some? (operation/undatable-fault {:today today}))
+          (str "accepted as a request date: " (pr-str today)))))
+  (is (nil? (operation/undatable-fault {:today 20260713}))))
+
+(deftest an-entry-that-cannot-state-its-expiry-cannot-be-served
+  (doseq [vu [nil "20200101" :forever]]
+    (is (some? (operation/unservable-fault {:kb-id "kb-x" :valid-until vu}))
+        (str "accepted as a validity window: " (pr-str vu))))
+  (is (nil? (operation/unservable-fault {:kb-id "kb-x" :valid-until 20401231}))))

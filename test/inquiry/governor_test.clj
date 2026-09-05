@@ -79,3 +79,118 @@
                                   :confidence 0.3 :stake :low} st)]
     (is (not (:hard? v)))
     (is (:escalate? v))))
+
+;; ------------------------------------------------------------------
+;; Refusals the governor could not make on 0abfc59. Each proposal below
+;; is WELL FORMED apart from the one thing under test, so the rule
+;; fires for its own reason — a red that comes from a second defect is
+;; not a demonstration of the first.
+;; ------------------------------------------------------------------
+
+(defn- rules-of [v] (set (map :rule (:violations v))))
+
+(deftest hard-on-an-undeclared-op
+  (testing "measured on 0abfc59: :purge-knowledge-base -> ok? true, and committed"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :not-a-desk-op :effect :propose
+                                    :confidence 0.9} st)]
+      (is (:hard? v))
+      (is (contains? (rules-of v) :unsupported-op)))))
+
+(deftest hard-on-a-misspelled-op-rather-than-skipping-its-rules
+  (testing "the typo that used to answer without citing anything"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :answer_inquiry :effect :propose
+                                    :kb-id nil :answer "invented" :confidence 0.9} st)]
+      (is (:hard? v))
+      (is (contains? (rules-of v) :unsupported-op)))))
+
+(deftest hard-on-a-reserved-op-with-its-own-name
+  (testing "an authority boundary, not a vocabulary error — the names differ
+            so the enquirer is sent to the right place"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :delete-client-records :effect :propose
+                                    :confidence 0.9} st)]
+      (is (:hard? v))
+      (is (contains? (rules-of v) :reserved-op))
+      (is (not (contains? (rules-of v) :unsupported-op))))
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :give-legal-advice :effect :propose
+                                    :confidence 0.9} st)]
+      (is (contains? (rules-of v) :reserved-op)))))
+
+(deftest a-reserved-op-is-refused-not-escalated
+  (testing "escalation asks a human to approve THIS actor's proposal;
+            these are acts it may not put in front of a human as its own"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :amend-official-record :effect :propose
+                                    :confidence 0.9} st)]
+      (is (:hard? v))
+      (is (not (:escalate? v)))
+      (is (not (:ok? v))))))
+
+(deftest hard-on-an-answer-with-no-answer
+  (let [st (fresh-store)
+        v (governor/check req {} {:op :answer-inquiry :effect :propose
+                                  :kb-id "kb-1" :confidence 0.9} st)]
+    (is (:hard? v))
+    (is (contains? (rules-of v) :incomplete-proposal))))
+
+(deftest hard-on-an-undatable-request
+  (testing "measured on 0abfc59: :today nil served kb-old, expired 2023-03-31.
+            The proposal is otherwise well formed and the entry is real, so
+            :undatable-request is the only thing wrong with it."
+    (doseq [today [nil "20260713"]]
+      (let [st (fresh-store)
+            v (governor/check {:client-id "client-1" :today today} {}
+                              (answer "kb-old") st)]
+        (is (:hard? v) (str "admitted with :today " (pr-str today)))
+        (is (contains? (rules-of v) :undatable-request))))))
+
+(deftest hard-on-an-entry-that-cannot-state-its-expiry
+  (testing "measured on 0abfc59: :valid-until nil and \"20200101\" were served"
+    (doseq [vu [nil "20200101"]]
+      (let [st (fresh-store)]
+        (store/register-kb-entry! st {:kb-id "kb-undated" :client-id "client-1"
+                                      :topic "undated" :answer "x" :valid-until vu})
+        (let [v (governor/check req {} (answer "kb-undated") st)]
+          (is (:hard? v) (str "admitted with :valid-until " (pr-str vu)))
+          (is (contains? (rules-of v) :unservable-kb-entry)))))))
+
+(deftest a-fresh-entry-with-both-dates-still-passes
+  (testing "the freshness rules refuse undatable inputs without refusing everything"
+    (let [st (fresh-store)
+          v (governor/check req {} (answer "kb-1") st)]
+      (is (:ok? v))
+      (is (empty? (:violations v))))))
+
+(deftest hard-on-a-confidence-that-is-not-a-confidence
+  (testing "measured on 0abfc59: 2.5 cleared the floor; \"0.9\" threw ClassCastException"
+    (doseq [c [2.5 -1.0 "0.9"]]
+      (let [st (fresh-store)
+            v (governor/check req {} (assoc (answer "kb-1") :confidence c) st)]
+        (is (:hard? v) (str "admitted as a confidence: " (pr-str c)))
+        (is (contains? (rules-of v) :ill-formed-field))))))
+
+(deftest check-is-total-and-never-throws
+  (testing "a crash is not a refusal — it yields no verdict, no violation
+            and no ledger entry, so the one thing the actor exists to do
+            does not happen"
+    (let [st (fresh-store)]
+      (doseq [p [{:op nil :effect :propose}
+                 {:op "answer-inquiry" :effect :propose :confidence "high"}
+                 {}
+                 {:op :answer-inquiry :effect :propose :kb-id 42 :answer "x" :confidence 0.9}
+                 {:op :answer-inquiry :effect :propose :kb-id "kb-1" :answer "x" :confidence nil}]]
+        (let [v (governor/check req {} p st)]
+          (is (map? v) (str "no verdict for " (pr-str p)))
+          (is (contains? v :ok?))
+          (is (false? (:ok? v)) (str "admitted: " (pr-str p))))))))
+
+(deftest an-absent-confidence-still-merely-escalates
+  (testing "unchanged behaviour: no stated confidence is the lowest confidence,
+            not an ill-formed field"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :log-inquiry :effect :propose} st)]
+      (is (not (:hard? v)))
+      (is (:escalate? v)))))
