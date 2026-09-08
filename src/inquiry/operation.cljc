@@ -42,7 +42,7 @@
   A supported op also declares the fields a proposal MUST carry
   (`:requires`), checked BEFORE the invariants so that a missing field
   is refused rather than skipped."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (def supported
   "op -> {:summary :requires :escalates?}. `:requires` are the proposal
