@@ -69,12 +69,12 @@ registered mutation in the superproject's `scripts/maturity-loop/`:
 
 ## Layout
 
-    src/inquiry/operation.cljc  the op vocabulary, once, as an allowlist
-    src/inquiry/governor.cljc   the independent refusal layer
-    src/inquiry/ledger.cljc     audit entries that name their authorisation
-    src/inquiry/store.cljc      clients, KB entries, records, ledger (SSoT)
-    src/inquiry/advisor.cljc    proposes only; mock and LLM
-    src/inquiry/actor.cljc      the StateGraph wiring the above together
+    src/inquiry/operation.cljk  the op vocabulary, once, as an allowlist
+    src/inquiry/governor.cljk   the independent refusal layer
+    src/inquiry/ledger.cljk     audit entries that name their authorisation
+    src/inquiry/store.cljk      clients, KB entries, records, ledger (SSoT)
+    src/inquiry/advisor.cljk    proposes only; mock and LLM
+    src/inquiry/actor.cljk      the StateGraph wiring the above together
 
     clojure -M:test    55 tests / 182 assertions
     clojure -M:lint    0 errors
