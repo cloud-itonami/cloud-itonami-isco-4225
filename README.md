@@ -76,8 +76,8 @@ registered mutation in the superproject's `scripts/maturity-loop/`:
     src/inquiry/advisor.cljk    proposes only; mock and LLM
     src/inquiry/actor.cljk      the StateGraph wiring the above together
 
-    clojure -M:test    55 tests / 182 assertions
-    clojure -M:lint    0 errors
+    kbb -M:test    55 tests / 182 assertions
+    kbb -M:lint    0 errors
 
 AGPL-3.0-or-later, forkable by any qualified operator. Part of the
 [cloud-itonami](https://itonami.cloud) open business fleet.
