@@ -6,7 +6,7 @@
   `(:disposition :record)`. The README says :publish-faq — external
   publication — ALWAYS requires human sign-off, and no entry could show
   that it had received it."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [inquiry.ledger :as ledger]))
 
 (defn- fault-of [m]
