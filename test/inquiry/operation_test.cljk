@@ -8,7 +8,7 @@
   name is the part an operator reads and acts on — an enquirer told
   `unsupported-op` goes looking for a typo, one told `reserved-op`
   goes looking for the person allowed to do it."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [inquiry.operation :as operation]))
 
 (deftest classify-is-total

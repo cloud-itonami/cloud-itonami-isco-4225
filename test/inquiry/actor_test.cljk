@@ -1,5 +1,5 @@
 (ns inquiry.actor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [inquiry.actor :as actor]
             [inquiry.ledger :as ledger]
             [inquiry.store :as store]))
