@@ -1,7 +1,7 @@
 (ns inquiry.governor
   "InquiryClerksGovernor — the independent safety/traceability layer
   for the ISCO-08 4225 community inquiry-desk actor (itonami actor
-  pattern, ADR-2607011000 / CLAUDE.md Actors section). Modeled on
+  pattern, ADR-2607011000 / AGENTS.md Actors section). Modeled on
   cloud-itonami-isco-4311's bookkeeping.governor. The inquiry-specific
   twist: an ANSWER must cite a registered knowledge-base entry, and the
   entry's validity window is checked DETERMINISTICALLY against the
